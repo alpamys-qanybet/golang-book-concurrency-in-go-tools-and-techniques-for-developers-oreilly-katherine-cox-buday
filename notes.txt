@@ -37,3 +37,50 @@ Starvation is any situation where a concurrent process cannot get all the resour
 
  As of Go 1.8, garbage collection pauses are generally between 10 and 100 microseconds!
 
+
+Concurrency is a property of the code; parallelism is a property of the running program.
+
+
+Before Go if you wanted to write concurrent code, you would model your program in terms of threads and synchronize the access to the memory between them. If you had a lot of things you had to model concurrently and your machine couldn’t handle that many threads, you created a thread pool and multiplexed your operations onto the thread pool.
+
+Go has added another link in that chain: the goroutine. In addition, Go has borrowed several concepts from the work of famed computer scientist Tony Hoare, and introduced new primitives for us to use, namely channels.
+
+We’d assume that introducing another level of abstraction below OS threads would bring with it more difficulties, but the interesting thing is that it doesn’t. It actually makes things easier. This is because we haven’t really added another layer of abstraction on top of OS threads, we’ve supplanted them.
+
+Threads are still there, of course, but we find that we rarely have to think about our problem space in terms of OS threads. Instead, we model things in goroutines and channels, and occasionally shared memory.
+
+CSP stands for “Communicating Sequential Processes,” which is both a technique and the name of the paper that introduced it. In 1978, Charles Antony Richard Hoare published the paper in the Association for Computing Machinery (ACM).
+
+Inputs and outputs needed to be considered language primitives, Hoare’s CSP programming language contained primitives to model input and output, or communication, between processes correctly (this is where the paper’s name comes from). Hoare applied the term processes to any encapsulated portion of logic that required input to run and produced output other processes would consume.
+
+For communication between the processes, Hoare created input and output com‐ mands: ! for sending input into a process, and ? for reading output from a process.
+
+Each command had to specify either an output variable (in the case of reading a variable out of a process), or a destination (in the case of sending input to a process). Sometimes these two would refer to the same thing, in which case the two processes would be said to correspond. In other words, output from one process would flow directly into the input of another process.
+
+Operation 							Explanation
+
+cardreader?cardimage				From cardreader, read a card and assign its value (an array of characters) to the 
+									variable cardimage.
+
+lineprinter!line					To lineprinter, send the value of lineimage for printing.
+
+image X?(x, y)						From process named X, input a pair of values and assign them to x and y.
+
+DIV!(3*a+b, 13)						To process DIV, output the two specified values.
+
+*[c:character; west?c → east!c]		Read all the characters output by west, and output them one by one to east. 
+									The repetition  terminates when the process west terminates.
+
+The similarities to Go’s channels are apparent. Notice how in the last example the output from west was sent to a variable c and the input to east was received from the same variable. These two processes correspond.
+
+Over the next six years, the idea of CSP was refined into a formal representation of something called process calculus in an effort to take the ideas of communicating sequential processes and actually begin to reason about program correctness. Process calculus is a way to mathematically model concurrent systems and also provides algebraic laws to perform transformations on these systems to analyze their various properties, e.g., efficiency and correctness.
+
+The language also utilized a so-called guarded command, which Edgar Dijkstra had introduced in 1974. (“Guarded commands, nondetermi‐ nacy and formal derivation of programs”).
+
+A guarded command is simply a statement with a left- and righthand side, split by a →.
+
+The lefthand side served as a conditional, or guard for the righthand side in that if the lefthand side was false or, in the case of a command, returned false or had exited, the righthand side would never be executed.
+
+Combining these with Hoare’s I/O commands laid the foundation for Hoare’s communicating processes, and thus Go’s channels.
+
+It’s common for languages to end their chain of abstraction at the level of the OS thread and memory access synchronization. Go takes a different route and supplants this with the concept of goroutines and channels.
