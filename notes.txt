@@ -1,0 +1,39 @@
+If software was web scale, among other things, you could expect that it would be embarrassingly parallel; that is, web scale software is usually expected to be able to handle hundreds of thousands (or more) of simultaneous workloads by adding more instances of the application.
+
+A race condition occurs when two or more operations must execute in the correct order, but the program has not been written so that this order is guaranteed to be maintained.
+Most of the time, this shows up in what’s called a data race, where one concurrent operation attempts to read a variable while at some undetermined time another con‐ current operation is attempting to write to the same variable.
+
+Atomicity
+When something is considered atomic, or to have the property of atomicity, this means that within the context that it is operating, it is indivisible, or uninterruptible.
+
+
+Deadlock
+A deadlocked program is one in which all concurrent processes are waiting on one another. In this state, the program will never recover without outside intervention.
+
+The conditions are now known as the Coffman Conditions and are the basis for techniques that help detect, prevent, and correct deadlocks.
+The Coffman Conditions are as follows:
+
+Mutual Exclusion
+A concurrent process holds exclusive rights to a resource at any one time.
+
+Wait For Condition
+A concurrent process must simultaneously hold a resource and be waiting for an additional resource.
+
+No Preemption
+A resource held by a concurrent process can only be released by that process, so it fulfills this condition.
+
+Circular Wait
+A concurrent process (P1) must be waiting on a chain of other concurrent pro‐ cesses (P2), which are in turn waiting on it (P1), so it fulfills this final condition too.
+
+
+
+Livelock
+Livelocks are programs that are actively performing concurrent operations, but these operations do nothing to move the state of the program forward.
+
+
+Starvation
+Starvation is any situation where a concurrent process cannot get all the resources it needs to perform work.
+
+
+ As of Go 1.8, garbage collection pauses are generally between 10 and 100 microseconds!
+
