@@ -1,3 +1,5 @@
+CHAPTER 1 An Introduction to Concurrency
+
 If software was web scale, among other things, you could expect that it would be embarrassingly parallel; that is, web scale software is usually expected to be able to handle hundreds of thousands (or more) of simultaneous workloads by adding more instances of the application.
 
 A race condition occurs when two or more operations must execute in the correct order, but the program has not been written so that this order is guaranteed to be maintained.
@@ -36,6 +38,12 @@ Starvation is any situation where a concurrent process cannot get all the resour
 
 
  As of Go 1.8, garbage collection pauses are generally between 10 and 100 microseconds!
+
+
+=========================================================================================================================
+
+
+CHAPTER 2 Modeling Your Code: Communicating Sequential Processes
 
 
 Concurrency is a property of the code; parallelism is a property of the running program.
@@ -84,3 +92,36 @@ The lefthand side served as a conditional, or guard for the righthand side in th
 Combining these with Hoare’s I/O commands laid the foundation for Hoare’s communicating processes, and thus Go’s channels.
 
 It’s common for languages to end their chain of abstraction at the level of the OS thread and memory access synchronization. Go takes a different route and supplants this with the concept of goroutines and channels.
+
+
+
+Goroutines are lightweight, and we normally won’t have to worry about creating one.
+
+Go’s runtime multiplexes goroutines onto OS threads automatically and manages their scheduling for us.
+
+Channels, for instance, are inherently composable with other channels. This makes writing large systems simpler because you can coordinate the input from multiple subsystems by easily composing the output together. You can combine input channels with timeouts, cancellations, or messages to other subsystems. Coordinating mutexes is a much more difficult proposition.
+
+The select statement is the complement to Go’s channels and is what enables all the difficult bits of composing channels. select statements allow you to efficiently wait for events, select a message from competing channels in a uniform random way, continue on if there are no messages waiting, and more.
+
+
+Go was designed around CSP; however, Go also supports more traditional means of writing concurrent code through memory access synchronization and the primitives that follow that technique. Structs and methods in the sync and other packages allow you to perform locks, create pools of resources, preempt goroutines, and more.
+
+Package sync provides basic synchronization primitives such as mutual exclusion locks. Other than the Once and WaitGroup types, most are intended for use by low-level library routines. Higher-level synchronization is better done via channels and communication.
+
+
+Consider structuring your program so that only one goroutine at a time is ever responsible for a particular piece of data. Do not communicate by sharing memory. Instead, share memory by communicating.
+
+
+
+Are you trying to transfer ownership of data? Use channels
+If you have a bit of code that produces a result and wants to share that result with another bit of code, what you’re really doing is transferring ownership of that data.
+One way to make concurrent programs safe is to ensure only one concurrent context has ownership of data at a time. Channels help us communicate this concept by encoding that intent into the channel’s type.
+
+Are you trying to guard internal state of a struct? Use primitives
+This is a great candidate for memory access synchronization primitives, and a pretty strong indicator that you shouldn’t use channels. Remember the key word here is internal. If you find yourself exposing locks beyond a type, this should raise a red flag. Try to keep the locks constrained to a small lexical scope.
+
+Are you trying to coordinate multiple pieces of logic? Use channels
+Channels are inherently more composable than memory access synchronization primitives. Having locks scattered throughout your object-graph sounds like a nightmare, but having channels everywhere is expected and encouraged! I can compose channels, but I can’t easily compose locks or methods that return values.
+
+Is it a performance-critical section? Use primitives
+It may help, because channels use memory access synchronization to operate, therefore they can only be slower, however, a performance-critical section might be hinting that we need to restructure our program.
