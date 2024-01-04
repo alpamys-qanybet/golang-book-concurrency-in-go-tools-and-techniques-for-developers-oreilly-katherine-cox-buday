@@ -125,3 +125,23 @@ Channels are inherently more composable than memory access synchronization primi
 
 Is it a performance-critical section? Use primitives
 It may help, because channels use memory access synchronization to operate, therefore they can only be slower, however, a performance-critical section might be hinting that we need to restructure our program.
+
+
+=========================================================================================================================
+
+CHAPTER 3 Go’s Concurrency Building Blocks
+
+Goroutines are one of the most basic units of organization in a Go program, in fact, every Go program has at least one goroutine: the main goroutine, which is automatically created and started when the process begins. In almost any program you’ll probably find. They’re not OS threads, and they’re not exactly green threads—threads that are managed by a language’s runtime—they’re a higher level of abstraction known as coroutines.
+
+Coroutines are simply concurrent subroutines (functions, closures, or methods in Go) that are nonpreemptive—that is, they cannot be interrupted. Instead, coroutines have multiple points throughout which allow for suspension or reentry.
+
+Concurrency is not a property of a coroutine(thus goroutine): something must host several coroutines simultaneously and give each an opportunity to execute—otherwise, they wouldn’t be concurrent!
+
+Go’s mechanism for hosting goroutines is an implementation of what’s called an M:N scheduler, which means it maps M green threads to N OS threads.
+
+
+Go follows a model of concurrency called the fork-join model. The word fork refers to the fact that at any point in the program, it can split off a child branch of execution to be run concurrently with its parent. The word join refers to the fact that at some point in the future, these concurrent branches of execution will join back together. Where the child rejoins the parent is called a join point.
+
+
+Goroutine is extraordinarily lightweight.
+A newly minted goroutine is given a few kilobytes, which is almost always enough. When it isn’t, the run-time grows (and shrinks) the memory for storing the stack auto‐ matically, allowing many goroutines to live in a modest amount of memory. The CPU overhead averages about three cheap instructions per function call. It is practical to create hundreds of thousands of goroutines in the same address space. If goroutines were just threads, system resources would run out at a much smaller number.
