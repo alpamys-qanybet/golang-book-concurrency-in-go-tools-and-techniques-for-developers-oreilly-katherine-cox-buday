@@ -145,3 +145,127 @@ Go follows a model of concurrency called the fork-join model. The word fork refe
 
 Goroutine is extraordinarily lightweight.
 A newly minted goroutine is given a few kilobytes, which is almost always enough. When it isn’t, the run-time grows (and shrinks) the memory for storing the stack auto‐ matically, allowing many goroutines to live in a modest amount of memory. The CPU overhead averages about three cheap instructions per function call. It is practical to create hundreds of thousands of goroutines in the same address space. If goroutines were just threads, system resources would run out at a much smaller number.
+
+
+Context switching is when something hosting a concurrent process must save its state to switch to running a different concurrent process.
+
+If we have too many concurrent processes, we can spend all of our CPU time context switching between them and never get any real work done.
+
+At the OS level, with threads, this can be quite costly. The OS thread must save things like register values, lookup tables, and memory maps to successfully be able to switch back to the current thread when it is time. Then it has to load the same information for the incoming thread.
+
+Context switching in software is comparatively much, much cheaper. Under a software-defined scheduler, the runtime can be more selective in what is persisted for retrieval, how it is persisted, and when the persisting need occur.
+
+
+1.467 μs os thread context switching
+0.225 μs goroutine context switching, 92% faster than an OS context switch on my machine.
+
+
+The sync package contains the concurrency primitives that are most useful for low-level memory access synchronization.
+
+Go has built a new set of concurrency primitives on top of the memory access synchronization primitives to provide you with an expanded set of things to work with.
+
+WaitGroup is a great way to wait for a set of concurrent operations to complete when you either don’t care about the result of the concurrent operation, or you have other means of collecting their results. If neither of those conditions are true, I suggest you use channels and a select statement instead.
+
+Mutex stands for “mutual exclusion” and is a way to guard critical sections of your program that requires exclusive access to a shared resource.
+
+Mutex provides a concurrent-safe way to express exclusive access to these shared resources.
+
+Always call Unlock within a defer statement. This is a very common idiom when utilizing a Mutex to ensure the call always happens, even when panicing. Failing to do so will probably cause your program to deadlock.
+
+It is expensive to enter and exit a critical section, and so generally people attempt to minimize the time spent in critical sections.
+
+The sync.RWMutex is conceptually the same thing as a Mutex: it guards access to memory; however, RWMutex gives you a little bit more control over the memory. You can request a lock for reading, in which case you will be granted access unless the lock is being held for writing. This means that an arbitrary number of readers can hold a reader lock so long as nothing else is holding a writer lock.
+
+It’s usually advisable to use RWMutex instead o Mutex when it logically makes sense.
+
+
+Cond is a rendezvous point for goroutines waiting for or announcing the occurrence of an event.
+The NewCond function takes in a type that satisfies the sync.Locker interface.
+ex: (sync.Locker(sync.Mutex, sync.RWMutex) has Lock Unlock methods)
+c := sync.NewCond(&sync.Mutex{})
+
+c.L.Lock()
+for !condition() {
+    c.Wait() // Here we wait to be notified that the condition has occurred.
+}
+//	... make use of condition ...
+c.L.Unlock()
+
+// c.Wait documentation says this is common pattern of implementing the code:
+
+//	c.L.Lock()
+//	for !condition() {
+//	    c.Wait()
+//	}
+//	... make use of condition ...
+//	c.L.Unlock()
+
+
+condition Wait() doesn’t just block, it suspends the current goroutine, allowing other goroutines to run on the OS thread.
+
+TODO: need to understand this and practice, didn't get it
+few other things happen when you call Wait: upon entering Wait, Unlock is called on the Cond variable’s Locker,
+and upon exiting Wait, Lock is called on the Cond variable’s Locker.
+
+
+code(this code is understandable):
+
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func main() {
+	c := sync.NewCond(&sync.Mutex{})
+	queue := make([]interface{}, 0, 10)
+
+	removeFromQueue := func(delay time.Duration) {
+		time.Sleep(delay)
+		c.L.Lock()
+		queue = queue[1:]
+		fmt.Println("Removed from queue")
+		c.L.Unlock()
+		c.Signal()
+	}
+
+	for i := 0; i < 10; i++ {
+		c.L.Lock()
+		for len(queue) == 2 {
+			c.Wait()
+		}
+
+		fmt.Println("Adding to queue")
+		queue = append(queue, struct{}{})
+		go removeFromQueue(1 * time.Second)
+		c.L.Unlock()
+	}
+}
+
+/*
+
+Adding to queue
+Adding to queue
+Removed from queue
+Adding to queue
+Removed from queue
+Adding to queue
+Removed from queue
+Adding to queue
+Removed from queue
+Adding to queue
+Removed from queue
+Removed from queue
+Adding to queue
+Adding to queue
+Removed from queue
+Adding to queue
+Removed from queue
+Adding to queue
+
+
+*/
+
+
