@@ -46,7 +46,7 @@ func main() {
 		for len(queue) == 2 {
 
 			// We call Wait, which will suspend the main goroutine until
-			// a signal on the condi‐ tion has been sent.
+			// a signal on the condition has been sent.
 			c.Wait()
 		}
 

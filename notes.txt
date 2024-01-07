@@ -208,6 +208,13 @@ few other things happen when you call Wait: upon entering Wait, Unlock is called
 and upon exiting Wait, Lock is called on the Cond variable’s Locker.
 
 
+Signal. This is one of two methods that the Cond type provides for notifying goroutines blocked on a Wait call that the condition has been triggered. The other is a method called Broadcast.
+
+Internally, the runtime maintains a FIFO list of goroutines waiting to be signaled;
+Signal finds the goroutine that’s been waiting the longest and notifies that,
+whereas Broadcast sends a signal to all goroutines that are waiting.
+
+
 code(this code is understandable):
 
 package main
@@ -269,3 +276,190 @@ Adding to queue
 */
 
 
+
+sync.Once utilizes some sync primitives internally to ensure that only one call to Do ever calls the function passed in—even on different goroutines.
+sync.Once guarantees that your functions are only called once.
+
+Pool is a concurrent-safe implementation of the object pool pattern.
+At a high level, a the pool pattern is a way to create and make available a fixed number, or pool, of things for use.
+
+
+Pool’s primary interface is its Get method.
+When called, Get will first check whether there are any available instances within the pool to return to the caller,
+and if not, call its New member variable to create a new one.
+When finished, callers call Put to place the instance they were working with back in the pool for use by other processes.
+
+
+code:
+
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var numCalcsCreated int
+	calcPool := &sync.Pool{
+		New: func() interface{} {
+			numCalcsCreated += 1
+			mem := make([]byte, 1024)
+
+			// Notice that we are storing the address of the slice of bytes.
+			return &mem
+		},
+	}
+
+	// Seed the pool with 4KB
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+	const numWorkers = 1024 * 1024
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	for i := numWorkers; i > 0; i-- {
+		go func() {
+			defer wg.Done()
+			// And here we are asserting the type is a pointer to a slice of bytes.
+			mem := calcPool.Get().(*[]byte)
+
+			defer calcPool.Put(mem)
+			// Assume something interesting, but quick is being done with
+			// this memory.
+		}()
+	}
+	wg.Wait()
+	fmt.Printf("%d calculators were created.\n", numCalcsCreated)
+}
+
+/*
+results may vary
+
+4 calculators were created.
+
+or
+
+6 calculators were created.
+
+or
+
+8calculators were created.
+
+but not 1024*1024
+*/
+
+
+Had I run this example without a sync.Pool, though the results are nondeterministic, in the worst case I could have been attempting to allocate a gigabyte of memory, but as you see from the output, I’ve only allocated 4 KB.
+
+
+Another common situation where a Pool is useful is for warming a cache of preallocated objects for operations that must run as quickly as possible.
+
+So when working with a Pool, just remember the following points:
+ - When instantiating sync.Pool, give it a New member variable that is thread-safe when called.
+ - When you receive an instance from Get, make no assumptions regarding the state of the object you receive back.
+ - Make sure to call Put when you’re finished with the object you pulled out of the pool.
+ Otherwise, the Pool is useless. Usually this is done with defer.
+ - Objects in the pool must be roughly uniform in makeup.
+
+
+Channels are one of the synchronization primitives in Go derived from Hoare’s CSP.
+While they can be used to synchronize access of the memory,
+they are best used to communicate information between goroutines.
+
+When using channels, you’ll pass a value into a chan variable,
+and then somewhere else in your program read it off the channel.
+
+The disparate parts of your program don’t require knowledge of each other,
+only a reference to the same place in memory where the channel resides.
+
+This can be done by passing references of channels around your program.
+
+
+// Here we declare a channel. We say it is “of type” interface{} since the type we’ve declared is the empty interface.
+var dataStream chan interface{}
+
+//Here we instantiate the channel using the built-in make function.
+dataStream = make(chan interface{})
+
+
+
+Channels can also be declared to only support a unidirectional flow of data — that is,
+you can define a channel that only supports sending or receiving information.
+
+To declare a unidirectional channel, you’ll simply include the <- operator.
+
+To both declare and instantiate a channel that can only read,
+place the <- operator on the lefthand side, like so:
+
+var dataStream <-chan interface{} // only read
+dataStream := make(<-chan interface{})
+
+
+And to declare and create a channel that can only send,
+you place the <- operator on the righthand side, like so:
+
+var dataStream chan<- interface{} // only send
+dataStream := make(chan<- interface{})
+
+
+a := <-c // read from channel(NOT a <- c????)
+
+c <- a // write to channel(NOT c<- = a????)
+just remember it
+
+a := <-c
+c <- a
+
+
+You don’t often see unidirectional channels instantiated,
+but you’ll often see them used as function parameters and return types. 
+This is possible because Go will implicitly convert bidirectional channels to unidirectional channels when needed.
+
+
+package main
+
+import "fmt"
+
+func main() {
+	stringStream := make(chan string)
+	go func() {
+		stringStream <- "Hello channels!"
+	}()
+
+	fmt.Println(<-stringStream)
+}
+
+// Hello channels!
+
+Just because a goroutine was scheduled,
+there was no guarantee that it would run before the process exited;
+But channels are said to be blocking.
+This means that any goroutine that attempts to write to a channel that is full will wait until the channel has been emptied,
+and any goroutine that attempts to read from a channel that is empty will wait until at least one item is placed on it.
+
+
+even if place timer, it will wait:
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	stringStream := make(chan string)
+	go func() {
+		time.Sleep(2 * time.Second)
+		stringStream <- "Hello channels!"
+	}()
+
+	fmt.Println(<-stringStream)
+}
+
+
+Likewise, the anonymous goroutine is attempting to place a string literal on the stringStream, and so the goroutine will not exit until the write is successful.
+
+PROGRESS ==> PAGE 68
