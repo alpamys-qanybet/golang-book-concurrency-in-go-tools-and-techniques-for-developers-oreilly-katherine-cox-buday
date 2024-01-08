@@ -682,5 +682,222 @@ As a consumer of a channel, I only have to worry about two things:
 
 
 
-PROGRESS ==> PAGE 78
+Channels are the glue that binds goroutines together.
+The select statement is the glue that binds channels together;
+it’s how we’re able to compose channels together in a program to form larger abstractions.
+
+
+
+var c1, c2 <-chan interface{}
+var c3 chan<- interface{}
+select {
+case <- c1:
+	// Do something
+case <- c2:
+	// Do something
+case c3<- struct{}{}: 
+	// Do something 
+}
+
+Unlike switch blocks, case statements in a select block aren’t tested sequentially, and execution won’t automatically fall through if none of the criteria are met.
+
+
+If none of the channels are ready, the entire select statement blocks.
+Then when one the channels is ready, that operation will proceed, and its corresponding statements will execute.
+
+
+code:
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	start := time.Now()
+
+	c := make(chan interface{})
+	go func() {
+		time.Sleep(5 * time.Second)
+
+		// Here we close the channel after waiting five seconds.
+		close(c)
+	}()
+
+	fmt.Println("Blocking on read...")
+	select {
+	// Here we attempt a read on the channel.
+	case <-c:
+		fmt.Printf("Unblocked %v later.\n", time.Since(start))
+	}
+}
+
+// We only unblock roughly five seconds after entering the select block.
+// This is a simple and efficient way to block while we’re waiting for something to happen.
+
+/*
+
+Blocking on read...
+Unblocked 5.003761973s later.
+
+*/
+
+
+
+code:
+
+package main
+
+import "fmt"
+
+func main() {
+	c1 := make(chan interface{})
+	close(c1)
+	c2 := make(chan interface{})
+	close(c2)
+
+	var c1Count, c2Count int
+	for i := 1000; i >= 0; i-- {
+		select {
+		case <-c1:
+			c1Count++
+		case <-c2:
+			c2Count++
+		}
+	}
+
+	fmt.Printf("c1Count: %d\nc2Count: %d\n", c1Count, c2Count)
+}
+
+/*
+
+c1Count: 496
+c2Count: 505
+
+*/
+
+
+In a thousand iterations, roughly half the time the select statement read from c1,
+and roughly half the time it read from c2. That seems interesting, and maybe a bit too coincidental.
+In fact, it is! The Go runtime will perform a pseudorandom uniform selection over the set of case statements.
+This just means that of your set of case statements, each has an equal chance of being selected as all the others.
+
+
+
+If there’s nothing useful you can do when all the channels are blocked, but you also can’t block forever, you may want to time out.
+
+code:
+
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	var c <-chan int
+	select {
+	case <-c:
+		// do something
+	case <-time.After(1 * time.Second):
+		fmt.Println("Timed out.")
+	}
+}
+
+
+/*
+
+Timed out.
+
+*/
+
+
+
+
+
+What happens when no channel is ready, and we need to do something in the meantime?
+The select statement also allows for a default clause in case you’d like to do something if all the channels you’re selecting against are blocking.
+
+code:
+
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+
+	start := time.Now()
+	var c1, c2 <-chan int
+	select {
+	case <-c1:
+		// do something
+	case <-c2:
+		// do something
+	default:
+		fmt.Printf("In default after %v\n\n", time.Since(start))
+	}
+}
+
+// You can see that it ran the default statement almost instantaneously.
+// This allows you to exit a select block without blocking.
+
+/*
+
+In default after 2.76µs
+
+*/
+
+
+
+Usually you’ll see a default clause used in conjunction with a for-select loop.
+This allows a goroutine to make progress on work while waiting for another goroutine to report a result.
+
+code:
+
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	done := make(chan interface{})
+
+	go func() {
+		time.Sleep(5 * time.Second)
+
+		close(done)
+	}()
+
+	workCounter := 0
+
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		default:
+		}
+
+		// Simulate work
+		workCounter++
+		time.Sleep(1 * time.Second)
+	}
+
+	fmt.Printf("Achieved %v cycles of work before signalled to stop.\n", workCounter)
+}
+
+// Achieved 5 cycles of work before signalled to stop.
+
+
+
+GOMAXPROCS. the name is misleading: people often think this function relates to the number of logical processors on the host machine—and in a roundabout way it does—but really this function controls the number of OS threads that will host so-called “work queues.”
+
+PROGRESS ==> PAGE 85
 
