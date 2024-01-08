@@ -475,6 +475,212 @@ To close a channel, we use the close keyword, like so:
 c := make(chan interface{})
 close(c)
 
-PROGRESS ==> PAGE 68
+We could continue performing reads on channel indefinitely despite the channel remaining closed.
+We cannot write to closed channel,
+but you can read from closed channel.
 
+
+Ranging over a channel.
+The range keyword—used in conjunction with the for statement—supports channels as arguments,
+and will automatically break the loop when a channel is closed.
+This allows for concise iteration over the values on a channel.
+
+code:
+
+package main
+
+import "fmt"
+
+func main() {
+	intStream := make(chan int)
+
+	go func() {
+		defer close(intStream)
+
+		for i := 1; i <= 5; i++ {
+			intStream <- i
+		}
+	}()
+
+	for integer := range intStream {
+		fmt.Printf("%v ", integer)
+	}
+}
+
+// 1 2 3 4 5
+
+// it will read from even closed channel
+
+
+
+
+Closing a channel is also one of the ways you can signal multiple goroutines simultaneously.
+If you have n goroutines waiting on a single channel, instead of writing n times to the channel to unblock each goroutine,
+you can simply close the channel.
+
+
+code:
+
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	begin := make(chan interface{})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			// Here the goroutine waits until it is told it can continue.
+			<-begin
+
+			fmt.Printf("%v has begun\n", i)
+		}(i)
+	}
+
+	fmt.Println("Unblocking goroutines...")
+
+	// Here we close the channel, thus unblocking all the goroutines simultaneously.
+	close(begin)
+
+	wg.Wait()
+}
+
+/*
+
+Unblocking goroutines...
+0 has begun
+3 has begun
+1 has begun
+2 has begun
+4 has begun
+
+*/
+
+
+Buffered channels are given a capacity when they’re instantiated.
+
+This means that even if no reads are performed on the channel, a goroutine can still perform n writes,
+where n is the capacity of the buffered channel.
+
+code:
+
+var dataStream chan interface{}
+dataStream = make(chan interface{}, 4)
+
+Here we create a buffered channel with a capacity of four.
+This means that we can place four things onto the channel regardless of whether it’s being read from.
+
+
+
+Unbuffered channels are also defined in terms of buffered channels:
+an unbuffered channel is simply a buffered channel created with a capacity of 0.
+
+a := make(chan int) // unbufferred channel
+b := make(chan int, 0) // the same, unbufferred channel
+c := make(chan int, 1) // bufferred channel
+
+
+Writes to a channel block if a channel is full,
+and reads from a channel block if the channel is empty.
+
+An unbuffered channel has a capacity of zero and so it’s already full before any writes.
+A buffered channel with no receivers and a capacity of four would be full after four writes,
+and block on the fifth write since it has nowhere else to place the fifth element.
+
+Like unbuffered channels, buffered channels are still blocking; the preconditions that the channel be empty or full are just different.
+
+In this way, buffered channels are an in-memory FIFO queue for concurrent processes to communicate over.
+
+c := make(chan rune, 4)
+[   ][   ][   ][   ]
+
+c<-'a'
+['a'][   ][   ][   ]
+
+c<-'b'
+['a']['b'][   ][   ]
+
+c<-'c'
+['a']['b']['c'][   ]
+
+c<-'d'
+['a']['b']['c']['d']
+
+c<-'e'
+['a']['b']['c']['d'] 'e'
+The goroutine performing this write is blocked!
+The goroutine will remain blocked until room is made in the buffer by some goroutine performing a read.
+
+<-c // 'a'
+['b']['c']['d']['e']
+
+
+nil channel
+Read from nil channel will panic
+Write to nil channel will panic
+Close nil channel will panic
+Be sure to ensure the channels you’re working with are always initialized.
+
+
+
+operation 	Channel state 			Result
+
+Read 		nil 					Block 
+			Open and Not Empty 		Value 
+			Open and Empty 			Block 
+			Closed 					<default value>, false 
+			Write Only 				Compilation Error 
+
+Write 		nil 					Block 
+			Open and Full 			Block 
+			Open and Not Full 		Write Value 
+			Closed 					panic 
+			Receive Only 			Compilation Error 
+
+close 		nil 					panic 
+			Open and Not Empty 		Closes Channel; reads succeed until channel is drained, then reads produce default value Open and empty 		 Closes Channel; reads produces default value
+			Closed 					panic
+			Receive Only 			Compilation Error
+
+
+
+
+
+The first thing we should do to put channels in the right context is to assign channel ownership.
+I’ll define ownership as being a goroutine that instantiates, writes, and closes a channel.
+
+
+
+
+Let’s begin with channel owners.
+The goroutine that owns a channel should:
+1. Instantiate the channel.
+2. Perform writes, or pass ownership to another goroutine.
+3. Close the channel.
+4. Ecapsulate the previous three things in this list and expose them via a reader channel.
+
+By assigning these responsibilities to channel owners, a few things happen: 
+- Because we’re the one initializing the channel, we remove the risk of deadlocking by writing to a nil channel. 
+- Because we’re the one initializing the channel, we remove the risk of panicing by closing a nil channel. 
+- Because we’re the one who decides when the channel gets closed, we remove the risk of panicing by writing to a closed channel. 
+- Because we’re the one who decides when the channel gets closed, we remove the risk of panicing by closing a channel more than once. 
+- We wield the type checker at compile time to prevent improper writes to our channel.
+
+
+
+As a consumer of a channel, I only have to worry about two things:
+- Knowing when a channel is closed.
+- Responsibly handling blocking for any reason.
+
+
+
+
+PROGRESS ==> PAGE 78
 
