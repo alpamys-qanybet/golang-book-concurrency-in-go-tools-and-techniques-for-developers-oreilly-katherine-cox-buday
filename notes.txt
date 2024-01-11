@@ -40,6 +40,31 @@ Starvation is any situation where a concurrent process cannot get all the resour
  As of Go 1.8, garbage collection pauses are generally between 10 and 100 microseconds!
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 =========================================================================================================================
 
 
@@ -125,6 +150,33 @@ Channels are inherently more composable than memory access synchronization primi
 
 Is it a performance-critical section? Use primitives
 It may help, because channels use memory access synchronization to operate, therefore they can only be slower, however, a performance-critical section might be hinting that we need to restructure our program.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 =========================================================================================================================
@@ -899,5 +951,175 @@ loop:
 
 GOMAXPROCS. the name is misleading: people often think this function relates to the number of logical processors on the host machine—and in a roundabout way it does—but really this function controls the number of OS threads that will host so-called “work queues.”
 
-PROGRESS ==> PAGE 85
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=========================================================================================================================
+
+CHAPTER 4 Concurrency Patterns in Go
+
+When working with concurrent code, there are a few different options for safe operation:
+- Synchronization primitives for sharing memory (e.g., sync.Mutex)
+- Synchronization via communicating (e.g., channels)
+
+However, there are a couple of other options that are implicitly safe within multiple concurrent processes:
+- Immutable data
+- Data protected by confinement
+
+
+
+Immutable data is implicitly concurrent-safe.
+Each concurrent process may operate on the same data, but it may not modify it.
+If it wants to create new data, it must create a new copy of the data with the desired modifications.
+
+Confinement is ensuring information is only ever available from one concurrent process.
+There are two kinds of confinement possible: ad hoc and lexical.
+
+Ad hoc confinement is when you achieve confinement through a convention. ???
+
+
+Because of the lexical scope, we’ve made it impossible1 to do the wrong thing,
+and so we don’t need to synchronize memory access or share data through communication.
+
+Improved performance and reduced cognitive load on developers.
+Synchronization comes with a cost, and if you can avoid it you won’t have any critical sections,
+and therefore you won’t have to pay the cost of synchronizing them.
+
+
+for-select loop.
+
+// Either loop infinitely or range over something
+for {
+	// Do some work with channels 
+	select {
+	}
+}
+
+
+Sending iteration variables out on a channel.
+for _, s := range []string{"a", "b", "c"} {
+	select {
+		case <-done:
+			return
+		case stringStream <- s:
+	}
+}
+
+
+Looping infinitely waiting to be stopped.
+for {
+	select {
+		case <-done:
+			return 
+		default: 
+	} 
+
+	// Do non-preemptable work 
+}
+
+
+
+Goroutines are cheap and easy to create, but do cost resources, and are not garbage collected by the runtime.
+
+The goroutine has a few paths to termination:
+ - When it has completed its work.
+ - When it cannot continue its work due to an unrecoverable error.
+ - When it’s told to stop working.
+
+
+
+code:
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+
+	// Here we pass the done channel to the doWork function.
+	// As a convention, this channel is the first parameter.
+	doWork := func(
+		done <-chan interface{},
+		strings <-chan string,
+	) <-chan interface{} {
+		terminated := make(chan interface{})
+
+		go func() {
+			defer fmt.Println("doWork exited.")
+			defer close(terminated)
+
+			for {
+				select {
+				case s := <-strings:
+					fmt.Println("a") // not printed
+					// Do something interesting
+					fmt.Println(s)
+
+				// On this line we see the ubiquitous for-select pattern in use.
+				// One of our case statements is checking whether our done channel
+				// has been signaled. If it has, we return from the goroutine.
+				case <-done:
+					return // if we comment this line then we will stuck // Canceling doWork goroutine...
+				}
+			}
+		}()
+
+		return terminated
+	}
+
+	done := make(chan interface{})
+
+	terminated := doWork(done, nil)
+
+	// Here we create another goroutine that will cancel the goroutine spawned in doWork
+	// if more than one second passes.
+	go func() {
+		// Cancel the operation after 1 second.
+		time.Sleep(1 * time.Second)
+		fmt.Println("Canceling doWork goroutine...")
+		close(done)
+	}()
+
+	// This is where we join the goroutine spawned from doWork with the main goroutine.
+	<-terminated
+	fmt.Println("Done.")
+}
+
+/*
+
+Canceling doWork goroutine...
+doWork exited.
+Done.
+
+*/
+
+
+PROGRESS ==> PAGE 93
 
